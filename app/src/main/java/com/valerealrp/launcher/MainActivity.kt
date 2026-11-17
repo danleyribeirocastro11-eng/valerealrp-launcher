@@ -1,17 +1,21 @@
 package com.valerealrp.launcher
 
+import android.Manifest
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.widget.Button
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
@@ -19,46 +23,54 @@ import java.util.zip.ZipInputStream
 class MainActivity : AppCompatActivity() {
 
     private lateinit var btnJogar: Button
-    private lateinit var txtStatus: TextView
     private val ZIP_URL = "https://github.com/danleyribeirocastro11-eng/valerealrp-launcher/releases/download/v1/arquivos.zip"
-    private val IP_SERVIDOR = "127.0.0.1" // Troque pelo IP do seu host depois!
+    private val IP_SERVIDOR = "127.0.0.1" // Troque pelo IP real do seu servidor depois!
     private val PORTA_SERVIDOR = 7777
+    private val PERMISSAO_ARMAZENAMENTO = 100
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         btnJogar = findViewById(R.id.buttonJogar)
-        // Se você tirou o TextView do layout, comente a linha abaixo:
-        txtStatus = findViewById(R.id.textViewStatus) 
+
+        // Pede permissão de armazenamento (necessário para Android antigo)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), PERMISSAO_ARMAZENAMENTO)
+        }
 
         btnJogar.setOnClickListener {
             val pastaJogo = File(Environment.getExternalStorageDirectory(), "Android/data/ru.unisamp_mobile.game/files/")
             
-            // Verifica se o jogo já foi baixado (se a pasta existe e não está vazia)
+            // Se o jogo já foi baixado, abre direto
             if (pastaJogo.exists() && pastaJogo.listFiles()?.isNotEmpty() == true) {
                 abrirJogo()
             } else {
+                // Se não, inicia o download
                 baixarJogo()
             }
         }
     }
 
     private fun baixarJogo() {
-        txtStatus.text = "Iniciando download..."
+        Toast.makeText(this, "Iniciando download do Vale Real RP...", Toast.LENGTH_LONG).show()
+        btnJogar.text = "BAIXANDO..."
+
         val request = DownloadManager.Request(Uri.parse(ZIP_URL))
-        request.setTitle("Baixando Vale Real RP")
-        request.setDescription("Aguarde, baixando os arquivos do jogo...")
+        request.setTitle("Vale Real RP")
+        request.setDescription("Baixando arquivos do jogo...")
         request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "valereal.zip")
 
         val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val downloadId = downloadManager.enqueue(request)
+        downloadManager.enqueue(request)
 
         // Fica ouvindo até o download terminar
         val onComplete = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                txtStatus.text = "Extraindo arquivos..."
+                Toast.makeText(context, "Download concluído! Extraindo...", Toast.LENGTH_LONG).show()
+                btnJogar.text = "EXTRAINDO..."
+                
                 val arquivoZip = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "valereal.zip")
                 extrairZip(arquivoZip)
                 unregisterReceiver(this)
@@ -93,23 +105,26 @@ class MainActivity : AppCompatActivity() {
                 entry = zis.nextEntry
             }
             zis.close()
-            txtStatus.text = "Download concluído! Clique em JOGAR."
-            Toast.makeText(this, "Mods instalados com sucesso!", Toast.LENGTH_LONG).show()
-            zipFile.delete() // Apaga o zip depois de extrair para não ocupar espaço
+            
+            btnJogar.text = "JOGAR"
+            Toast.makeText(this, "Tudo pronto! Clique em JOGAR.", Toast.LENGTH_LONG).show()
+            zipFile.delete() // Apaga o zip para não ocupar espaço
+            
         } catch (e: Exception) {
-            txtStatus.text = "Erro ao extrair arquivos."
+            btnJogar.text = "JOGAR"
+            Toast.makeText(this, "Erro ao extrair. Verifique o espaço.", Toast.LENGTH_LONG).show()
             e.printStackTrace()
         }
     }
 
     private fun abrirJogo() {
         try {
-            // Tenta abrir o SA-MP Mobile passando o IP e a Porta
+            // Tenta abrir o SA-MP Mobile passando o IP e a Porta via Intent
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("samp://$IP_SERVIDOR:$PORTA_SERVIDOR"))
             intent.setPackage("ru.unisamp_mobile.game")
             startActivity(intent)
         } catch (e: Exception) {
-            // Se o SA-MP não suportar o link direto, tenta abrir o app normal
+            // Se falhar, tenta abrir o app do SA-MP normal
             val intent = packageManager.getLaunchIntentForPackage("ru.unisamp_mobile.game")
             if (intent != null) {
                 startActivity(intent)
